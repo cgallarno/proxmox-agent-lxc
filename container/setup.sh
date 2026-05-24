@@ -171,13 +171,26 @@ ok "installed recovery tools + systemd units"
 
 # ── optional: headless browser ──────────────────────────────────────────────
 if [[ "$ENABLE_BROWSER" == "true" ]]; then
-  log "Headless browser (Chromium)"
-  echo "  (pulls ~several hundred MB; this can take a few minutes with no output)"
-  apt-get install -y -qq chromium fonts-liberation >/dev/null 2>&1 \
-    || apt-get install -y -qq chromium-browser >/dev/null 2>&1 || true
-  command -v chromium >/dev/null 2>&1 || command -v chromium-browser >/dev/null 2>&1 \
-    && ok "Chromium installed (agent drives it headless)" \
-    || warn "Chromium not found; install manually"
+  log "Headless browser"
+  if [[ "$AGENT" == "hermes" ]]; then
+    # hermes bundles its own Playwright Chromium during install; it only needs
+    # the system libraries, which the non-root installer couldn't apt-get.
+    echo "  Installing Playwright system libraries (root)..."
+    if (cd "$OC_HOME/.hermes/hermes-agent" 2>/dev/null && \
+        PATH="$OC_HOME/.hermes/node/bin:$PATH" npx --yes playwright install-deps chromium >/dev/null 2>&1); then
+      ok "Playwright system libs installed (hermes drives its bundled Chromium)"
+    else
+      warn "Couldn't auto-install Playwright deps. Run as root once:"
+      echo "      cd $OC_HOME/.hermes/hermes-agent && PATH=$OC_HOME/.hermes/node/bin:\$PATH npx playwright install-deps chromium"
+    fi
+  else
+    echo "  (pulls ~several hundred MB; this can take a few minutes with no output)"
+    apt-get install -y -qq chromium fonts-liberation >/dev/null 2>&1 \
+      || apt-get install -y -qq chromium-browser >/dev/null 2>&1 || true
+    command -v chromium >/dev/null 2>&1 || command -v chromium-browser >/dev/null 2>&1 \
+      && ok "Chromium installed (agent drives it headless)" \
+      || warn "Chromium not found; install manually"
+  fi
 fi
 
 # ── optional: Signal ─────────────────────────────────────────────────────────
