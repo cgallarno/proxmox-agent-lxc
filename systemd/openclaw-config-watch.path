@@ -1,0 +1,11 @@
+[Unit]
+Description=Watch OpenClaw live config; auto-commit changes to the config repo
+
+[Path]
+PathModified=@OC_LIVE@/openclaw.json
+PathModified=@OC_LIVE@/exec-approvals.json
+PathModified=@OC_LIVE@/cron/jobs.json
+Unit=openclaw-config-watch.service
+
+[Install]
+WantedBy=multi-user.target

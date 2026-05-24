@@ -1,0 +1,13 @@
+[Unit]
+Description=Commit + push OpenClaw config changes to the config repo
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=@OC_USER@
+Group=@OC_USER@
+Environment=HOME=@OC_HOME@
+# Loop-safe: watches the LIVE files, writes to the REPO dir; never self-triggers.
+# No-ops cleanly when nothing changed; if push fails the local commit still lands.
+ExecStart=/usr/local/bin/openclaw-config-push

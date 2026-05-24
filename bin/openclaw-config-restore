@@ -1,0 +1,39 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Restore the live OpenClaw config from the git-backed repo.
+# Usage (run as the agent user):
+#   openclaw-config-restore               # latest committed (origin/main if remote, else HEAD)
+#   openclaw-config-restore <git-ref>     # a specific commit/tag/branch
+# Uses `git show <ref>:<file>` so the repo working tree is never modified.
+# After restoring:  sudo systemctl restart openclaw-gateway
+
+# shellcheck source=/dev/null
+[[ -f /etc/openclaw-lxc.env ]] && source /etc/openclaw-lxc.env
+
+LIVE="${OC_LIVE:?OC_LIVE not set}"
+REPO="${OC_REPO:?OC_REPO not set}"
+
+if [[ -n "${CONFIG_GIT_SSH_KEY:-}" ]]; then
+  export GIT_SSH_COMMAND="ssh -i ${CONFIG_GIT_SSH_KEY} -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes"
+fi
+
+# Default ref: origin/main if a remote exists, else local HEAD.
+if [[ -n "${1:-}" ]]; then
+  REF="$1"
+elif git -C "$REPO" remote get-url origin >/dev/null 2>&1; then
+  git -C "$REPO" fetch origin --quiet || true
+  REF="origin/main"
+else
+  REF="HEAD"
+fi
+
+umask 077
+git -C "$REPO" show "${REF}:openclaw.json"        > "$LIVE/openclaw.json"
+git -C "$REPO" show "${REF}:exec-approvals.json"  > "$LIVE/exec-approvals.json" 2>/dev/null || true
+install -d -m 700 "$LIVE/cron"
+git -C "$REPO" show "${REF}:cron/jobs.json"       > "$LIVE/cron/jobs.json"      2>/dev/null || true
+chmod 600 "$LIVE/openclaw.json" 2>/dev/null || true
+
+echo "[restore] live config restored from ${REF}."
+echo "[restore] review, then: sudo systemctl restart openclaw-gateway"

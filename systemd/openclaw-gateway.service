@@ -1,0 +1,30 @@
+[Unit]
+Description=OpenClaw Gateway (hardened, non-root)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+# Runs as the dedicated non-root agent user — NEVER root.
+User=@OC_USER@
+Group=@OC_USER@
+Environment=HOME=@OC_HOME@
+Environment=NODE_ENV=production
+Environment=PATH=/usr/local/bin:/usr/bin:/bin
+WorkingDirectory=@OC_HOME@
+ExecStart=@OC_BIN@ gateway
+Restart=on-failure
+RestartSec=5
+
+# Hardening — least privilege for an exec-capable agent on untrusted input.
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ProtectHome=true
+ReadWritePaths=@OC_HOME@
+ProtectControlGroups=true
+ProtectKernelTunables=true
+RestrictSUIDSGID=true
+
+[Install]
+WantedBy=multi-user.target

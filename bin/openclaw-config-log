@@ -1,0 +1,15 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Read-only view of the OpenClaw config repo: status + recent history.
+# Run as the agent user:  sudo -u <OC_USER> openclaw-config-log
+
+# shellcheck source=/dev/null
+[[ -f /etc/openclaw-lxc.env ]] && source /etc/openclaw-lxc.env
+REPO="${OC_REPO:?OC_REPO not set}"
+
+echo "== working tree =="
+git -C "$REPO" status -sb
+echo
+echo "== recent history =="
+git -C "$REPO" log --oneline -15
