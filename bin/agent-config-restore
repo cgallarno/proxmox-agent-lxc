@@ -1,0 +1,37 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Restore the live agent config from the git-backed repo.
+# Usage (as the agent user):  agent-config-restore [git-ref]
+# Uses `git show <ref>:<file>` so the repo working tree is never modified.
+# After restoring:  sudo systemctl restart agent-gateway
+
+# shellcheck source=/dev/null
+[[ -f /etc/agent-lxc.env ]] && source /etc/agent-lxc.env
+LIVE="${AGENT_LIVE:?AGENT_LIVE not set}"
+REPO="${AGENT_REPO:?AGENT_REPO not set}"
+read -ra FILES <<< "${TRACKED_FILES:?TRACKED_FILES not set}"
+
+if [[ -n "${GIT_SSH_KEY:-}" ]]; then
+  export GIT_SSH_COMMAND="ssh -i ${GIT_SSH_KEY} -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes"
+fi
+
+if [[ -n "${1:-}" ]]; then
+  REF="$1"
+elif git -C "$REPO" remote get-url origin >/dev/null 2>&1; then
+  git -C "$REPO" fetch origin --quiet || true
+  REF="origin/main"
+else
+  REF="HEAD"
+fi
+
+umask 077
+for f in "${FILES[@]}"; do
+  install -d -m 700 "$(dirname "$LIVE/$f")"
+  if git -C "$REPO" show "${REF}:${f}" > "$LIVE/$f" 2>/dev/null; then
+    chmod 600 "$LIVE/$f"
+  fi
+done
+
+echo "[restore] live config restored from ${REF}."
+echo "[restore] review, then: sudo systemctl restart agent-gateway"

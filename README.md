@@ -42,6 +42,25 @@ $EDITOR config.env            # set OC_USER, EXPOSURE_MODE, TAILSCALE_AUTHKEY, .
 To install into an **existing** Debian 13 LXC instead, copy the repo inside and
 run `container/setup.sh` with the same env vars exported.
 
+## Agent: OpenClaw or hermes-agent
+
+Set `AGENT` in `config.env`:
+
+- **`openclaw`** *(default, validated)* — Node-based [OpenClaw](https://openclaw.ai).
+  Fully automated, including Tailscale exposure.
+- **`hermes`** *(experimental)* — Python-based
+  [NousResearch/hermes-agent](https://github.com/NousResearch/hermes-agent).
+  Install (via its official installer, run **non-root** with `--skip-setup`),
+  the non-root systemd unit, and config history are automated. **Network
+  exposure is left MANUAL** — Hermes' bind address / port / Tailscale support
+  isn't documented or verified yet, so the installer prints the exact steps to
+  expose it (find the port, then `tailscale serve <port>`) instead of guessing.
+  Both share the same hardened scaffold (unprivileged LXC, non-root user,
+  git-backed config history, recovery tools). Config tracked per agent:
+  `~/.openclaw/{openclaw.json,exec-approvals.json,cron/jobs.json}` vs
+  `~/.hermes/{config.yaml,gateway.json}` (Hermes' `state.db` session store is
+  deliberately *not* tracked).
+
 ## What it sets up
 
 - OpenClaw (latest) on Node 22, gateway running as the non-root `OC_USER` under
@@ -91,8 +110,8 @@ host-side, captures everything, low maintenance.
 provision-lxc.sh            host-side: create the unprivileged LXC, run setup
 container/setup.sh          in-container: install + harden OpenClaw
 config.example.env          tunables (copy to config.env)
-bin/                        openclaw-config-{push,restore,log}
-systemd/                    gateway + config-watch unit templates (@PLACEHOLDERS@)
+bin/                        agent-config-{push,restore,log} (agent-agnostic)
+systemd/                    agent-gateway + agent-config-watch unit templates (@PLACEHOLDERS@)
 ```
 
 ## License

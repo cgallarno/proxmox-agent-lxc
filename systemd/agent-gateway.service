@@ -1,5 +1,5 @@
 [Unit]
-Description=OpenClaw Gateway (hardened, non-root)
+Description=AI agent gateway (hardened, non-root)
 After=network-online.target
 Wants=network-online.target
 
@@ -10,9 +10,9 @@ User=@OC_USER@
 Group=@OC_USER@
 Environment=HOME=@OC_HOME@
 Environment=NODE_ENV=production
-Environment=PATH=/usr/local/bin:/usr/bin:/bin
+Environment=PATH=@AGENT_PATH@
 WorkingDirectory=@OC_HOME@
-ExecStart=@OC_BIN@ gateway
+ExecStart=@AGENT_CMD@ gateway
 Restart=on-failure
 RestartSec=5
 

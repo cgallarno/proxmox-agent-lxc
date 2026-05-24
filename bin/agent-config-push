@@ -1,0 +1,34 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Copy the live agent config into the git-backed repo, commit, and (if a remote
+# is configured) push. No-ops cleanly when nothing changed. Agent-agnostic:
+# reads paths + tracked-file list from /etc/agent-lxc.env. Runs as the agent user.
+
+# shellcheck source=/dev/null
+[[ -f /etc/agent-lxc.env ]] && source /etc/agent-lxc.env
+LIVE="${AGENT_LIVE:?AGENT_LIVE not set}"
+REPO="${AGENT_REPO:?AGENT_REPO not set}"
+read -ra FILES <<< "${TRACKED_FILES:?TRACKED_FILES not set}"
+
+if [[ -n "${GIT_SSH_KEY:-}" ]]; then
+  export GIT_SSH_COMMAND="ssh -i ${GIT_SSH_KEY} -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes"
+fi
+
+# Copy only the allowlisted tracked files (never secrets/sessions/state.db).
+for f in "${FILES[@]}"; do
+  install -D -m 600 "$LIVE/$f" "$REPO/$f" 2>/dev/null || true
+done
+
+cd "$REPO"
+git add -A
+if git diff --cached --quiet; then
+  echo "[config] no changes"; exit 0
+fi
+git commit -m "sync: ${AGENT:-agent} config $(date -Is)" >/dev/null
+echo "[config] committed"
+
+if git remote get-url origin >/dev/null 2>&1; then
+  git push >/dev/null 2>&1 && echo "[config] pushed" \
+    || echo "[config] WARN: push failed (commit is local; next run retries)" >&2
+fi
