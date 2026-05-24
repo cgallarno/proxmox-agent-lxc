@@ -26,6 +26,10 @@ ok()  { printf '  \033[32m✓\033[0m %s\n' "$*"; }
 
 [[ $(id -u) -eq 0 ]] || { echo "must run as root inside the container"; exit 1; }
 
+# Use an always-present locale so apt/perl don't spew locale warnings in a
+# fresh container (en_US.UTF-8 isn't generated yet).
+export LANG=C.UTF-8 LC_ALL=C.UTF-8
+
 # Helper: run a command as the agent user with a correct HOME.
 as_agent() { runuser -u "$OC_USER" -- env HOME="$OC_HOME" "$@"; }
 
@@ -116,6 +120,7 @@ ok "installed recovery tools + systemd units"
 # ── optional: headless browser (Chromium, driven by OpenClaw, non-root) ─────
 if [[ "$ENABLE_BROWSER" == "true" ]]; then
   log "Headless browser (Chromium) for OpenClaw automation"
+  echo "  (pulls ~several hundred MB; this can take a few minutes with no output)"
   apt-get install -y -qq chromium fonts-liberation >/dev/null 2>&1 \
     || apt-get install -y -qq chromium-browser >/dev/null 2>&1 || true
   CHROME_BIN="$(command -v chromium || command -v chromium-browser || true)"
@@ -145,10 +150,35 @@ log "Enable services"
 systemctl daemon-reload
 systemctl enable --now openclaw-gateway.service
 systemctl enable --now openclaw-config-watch.path
-ok "gateway + config watcher enabled"
+
+# Verify the gateway actually came up (it takes ~30s to initialize).
+sleep 5
+if systemctl is-active --quiet openclaw-gateway; then
+  ok "gateway active (non-root '$OC_USER'); config watcher enabled"
+else
+  echo "  WARNING: openclaw-gateway is not active — check: journalctl -u openclaw-gateway -n 50"
+fi
 
 # initial config snapshot
 as_agent /usr/local/bin/openclaw-config-push || true
+
+# ── exposure follow-up ───────────────────────────────────────────────────────
+# Tailscale Serve needs the agent user to be the operator, AND `tailscale up`
+# resets the operator — so when there's no pre-auth key, the operator must be
+# (re)set AFTER the manual `tailscale up`. Print the exact steps.
+if [[ "$EXPOSURE_MODE" == "tailscale" ]] && ! tailscale status >/dev/null 2>&1; then
+  cat <<EOF
+
+  ┌─ ACTION REQUIRED ─ Tailscale installed but not logged in ─────────────────
+  │ Finish exposing the gateway on your tailnet (run on the Proxmox host):
+  │   pct exec <vmid> -- tailscale up --hostname=${CT_HOSTNAME:-$OC_USER}
+  │   pct exec <vmid> -- tailscale set --operator=${OC_USER}    # MUST be AFTER 'up'
+  │   pct exec <vmid> -- systemctl restart openclaw-gateway
+  │ Confirm (allow ~30s for the gateway to register serve):
+  │   pct exec <vmid> -- tailscale serve status
+  └───────────────────────────────────────────────────────────────────────────
+EOF
+fi
 
 log "Done"
 echo "  Gateway runs as non-root '$OC_USER'. Manage with: sudo systemctl {status,restart} openclaw-gateway"

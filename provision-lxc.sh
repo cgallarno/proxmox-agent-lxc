@@ -116,7 +116,7 @@ echo "  Container : $VMID  (${CT_IP:-unknown})"
 echo "  Manage    : pct enter $VMID ;  pct stop $VMID ;  pct start $VMID"
 echo "  Gateway   : runs as non-root '$OC_USER' (systemctl status openclaw-gateway)"
 case "${EXPOSURE_MODE:-}" in
-  tailscale) echo "  Access    : https://<magicdns-name>/ (tailnet-only)";;
+  tailscale) echo "  Access    : https://<magicdns-name>/ (tailnet-only) — if no auth key was set, see the ACTION REQUIRED block above to finish 'tailscale up'";;
   loopback)  echo "  Access    : ssh -L 18789:127.0.0.1:18789 root@${CT_IP:-<ip>} then http://127.0.0.1:18789/";;
   lan-token) echo "  Access    : http://${CT_IP:-<ip>}:18789/  (token in ${OC_USER}'s ~/.gateway-token)";;
 esac

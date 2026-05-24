@@ -5,10 +5,10 @@ Provision a **hardened, headless [OpenClaw](https://openclaw.ai) agent** in an
 history and one-command recovery. A security-first counterpart to the common
 "desktop OpenClaw in a privileged container" scripts.
 
-> **Status:** the in-container setup mirrors a hand-validated deployment. The
-> host-side provisioner (`provision-lxc.sh`) has **not** yet been run
-> end-to-end on a live host — test it against a throwaway VMID before relying
-> on it. PRs welcome.
+> **Status:** validated end-to-end on Proxmox VE (Debian 13 / OpenClaw 2026.5.x)
+> — fresh unprivileged container to a live tailnet-served gateway. Tailscale
+> bring-up needs an auth key for full automation; otherwise the installer prints
+> the manual `tailscale up` + operator steps. PRs welcome.
 
 ## Why another one?
 
@@ -50,7 +50,10 @@ run `container/setup.sh` with the same env vars exported.
 - **Exposure mode** (`EXPOSURE_MODE`):
   - `tailscale` *(recommended)* — `bind loopback` + Tailscale Serve, reachable
     only on your tailnet at `https://<magicdns>/`, `auth=none` (safe *only*
-    because ingress is loopback + tailnet).
+    because ingress is loopback + tailnet). Set `TAILSCALE_AUTHKEY` for a fully
+    automated bring-up; without it you'll run `tailscale up` manually, then
+    **re-set the operator** (`tailscale up` resets it) and restart the gateway —
+    the installer prints the exact commands.
   - `loopback` — bind loopback only; reach via SSH tunnel.
   - `lan-token` — bind LAN **with** a generated token (never wide-open + no-auth).
 - **Config history** — the live config (`openclaw.json`, `exec-approvals.json`,
