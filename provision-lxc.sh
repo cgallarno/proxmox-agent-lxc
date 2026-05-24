@@ -117,6 +117,7 @@ echo "  Agent     : ${AGENT:-openclaw}"
 echo "  Container : $VMID  (${CT_IP:-unknown})"
 echo "  Manage    : pct enter $VMID ;  pct stop $VMID ;  pct start $VMID"
 echo "  Gateway   : runs as non-root '$OC_USER' (systemctl status agent-gateway)"
+echo "  Run agent : pct enter $VMID, then  r${AGENT:-openclaw} <args>   (e.g. r${AGENT:-openclaw} setup)"
 if [[ "${AGENT:-openclaw}" == "hermes" ]]; then
   echo "  Access    : CLI/messaging — Hermes has no inbound web port (see block above)"
 else

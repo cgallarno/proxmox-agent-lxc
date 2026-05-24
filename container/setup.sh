@@ -150,6 +150,16 @@ install -m 755 "$REPO_ROOT/bin/agent-config-push"    /usr/local/bin/agent-config
 install -m 755 "$REPO_ROOT/bin/agent-config-restore" /usr/local/bin/agent-config-restore
 install -m 755 "$REPO_ROOT/bin/agent-config-log"     /usr/local/bin/agent-config-log
 
+# Root convenience wrapper: run the agent as the non-root user (this minimal
+# LXC has no sudo). e.g. `ropenclaw config get gateway`, `rhermes setup`.
+cat > "/usr/local/bin/r${AGENT}" <<EOF
+#!/bin/sh
+# Run ${AGENT} as the non-root '${OC_USER}' user with its correct HOME/PATH.
+exec runuser -u ${OC_USER} -- env HOME=${OC_HOME} PATH=${AGENT_PATH} ${AGENT_CMD} "\$@"
+EOF
+chmod 755 "/usr/local/bin/r${AGENT}"
+ok "root wrapper installed: r${AGENT} (runs ${AGENT} as ${OC_USER})"
+
 subst() { sed -e "s|@OC_USER@|$OC_USER|g" -e "s|@OC_HOME@|$OC_HOME|g" \
               -e "s|@AGENT_CMD@|$AGENT_CMD|g" -e "s|@AGENT_PATH@|$AGENT_PATH|g" "$1"; }
 subst "$REPO_ROOT/systemd/agent-gateway.service"      > /etc/systemd/system/agent-gateway.service
@@ -237,14 +247,16 @@ if [[ "$AGENT" == "hermes" ]]; then
   ┌─ hermes-agent access ─ messaging-only gateway, no inbound web port ───────
   │ Verified (live test): 'hermes gateway' opens NO local HTTP port — it
   │ connects OUT to messaging platforms, so there is nothing to Tailscale-Serve
-  │ and no dashboard to bind. Use Hermes via:
-  │   • Pick a model:  pct enter <vmid> ; sudo -u $OC_USER -H $AGENT_CMD model
-  │   • Chat (TUI):    sudo -u $OC_USER -H $AGENT_CMD
-  │   • Messaging:     sudo -u $OC_USER -H $AGENT_CMD gateway setup
+  │ and no dashboard to bind. Use Hermes via (no sudo in this LXC — use the
+  │ r${AGENT} wrapper):
+  │   • Pick a model:  pct enter <vmid> ; r${AGENT} model
+  │   • Chat (TUI):    r${AGENT}
+  │   • Messaging:     r${AGENT} gateway setup
   └───────────────────────────────────────────────────────────────────────────
 EOF
 fi
 
 log "Done"
-echo "  Agent '$AGENT' runs as non-root '$OC_USER'. Manage: sudo systemctl {status,restart} agent-gateway"
-echo "  Config history: sudo -u $OC_USER agent-config-log"
+echo "  Agent '$AGENT' runs as non-root '$OC_USER'. Manage: systemctl {status,restart} agent-gateway"
+echo "  Run agent commands as root: r${AGENT} <args>   (e.g. r${AGENT} setup, r${AGENT} model)"
+echo "  Config history: runuser -u $OC_USER -- agent-config-log"

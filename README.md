@@ -55,8 +55,13 @@ Set `AGENT` in `config.env`:
   (its system libs auto-installed as root) are automated. **No web exposure** —
   verified on a live run that `hermes gateway` opens *no* inbound HTTP port
   (it connects outward to messaging platforms), so there's nothing to
-  Tailscale-Serve. Use Hermes via its CLI/TUI (`hermes`) or by configuring
-  messaging channels (`hermes gateway setup`).
+  Tailscale-Serve. Use Hermes via its CLI/TUI or by configuring messaging
+  channels.
+
+The container ships **no `sudo`**, so setup installs a root wrapper named
+`r<agent>` (`ropenclaw` / `rhermes`) that runs agent commands as the non-root
+user — e.g. `rhermes setup`, `rhermes model`, `rhermes` (chat), or
+`ropenclaw config get gateway`.
   Both share the same hardened scaffold (unprivileged LXC, non-root user,
   git-backed config history, recovery tools). Config tracked per agent:
   `~/.openclaw/{openclaw.json,exec-approvals.json,cron/jobs.json}` vs
