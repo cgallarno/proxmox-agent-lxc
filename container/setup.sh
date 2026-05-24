@@ -234,17 +234,13 @@ fi
 if [[ "$AGENT" == "hermes" ]]; then
   cat <<EOF
 
-  ┌─ EXPERIMENTAL: hermes-agent network exposure is MANUAL ───────────────────
-  │ This repo automated the install, non-root hardening, and config history,
-  │ but hermes' bind/port/Tailscale config isn't verified yet. To expose it:
-  │   1. Find the gateway's listening port:
-  │        pct exec <vmid> -- ss -tlnp | grep -i hermes
-  │   2. If it binds 0.0.0.0 it's LAN-reachable — confirm that's acceptable, or
-  │      restrict it (firewall / hermes config) to loopback first.
-  │   3. Tailnet-only access (operator already set if Tailscale is up):
-  │        pct exec <vmid> -- tailscale serve --bg --yes <PORT>
-  │   Then verify:  pct exec <vmid> -- tailscale serve status
-  │ Report the real port/bind back so we can automate this path.
+  ┌─ hermes-agent access ─ messaging-only gateway, no inbound web port ───────
+  │ Verified (live test): 'hermes gateway' opens NO local HTTP port — it
+  │ connects OUT to messaging platforms, so there is nothing to Tailscale-Serve
+  │ and no dashboard to bind. Use Hermes via:
+  │   • Pick a model:  pct enter <vmid> ; sudo -u $OC_USER -H $AGENT_CMD model
+  │   • Chat (TUI):    sudo -u $OC_USER -H $AGENT_CMD
+  │   • Messaging:     sudo -u $OC_USER -H $AGENT_CMD gateway setup
   └───────────────────────────────────────────────────────────────────────────
 EOF
 fi

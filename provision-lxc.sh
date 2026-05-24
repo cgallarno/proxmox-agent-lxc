@@ -118,7 +118,7 @@ echo "  Container : $VMID  (${CT_IP:-unknown})"
 echo "  Manage    : pct enter $VMID ;  pct stop $VMID ;  pct start $VMID"
 echo "  Gateway   : runs as non-root '$OC_USER' (systemctl status agent-gateway)"
 if [[ "${AGENT:-openclaw}" == "hermes" ]]; then
-  echo "  Access    : MANUAL — see the EXPERIMENTAL exposure block above (hermes port/bind not yet automated)"
+  echo "  Access    : CLI/messaging — Hermes has no inbound web port (see block above)"
 else
   case "${EXPOSURE_MODE:-}" in
     tailscale) echo "  Access    : https://<magicdns-name>/ (tailnet-only) — if no auth key, see ACTION REQUIRED above";;

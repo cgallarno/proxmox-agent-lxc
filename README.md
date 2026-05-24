@@ -51,10 +51,12 @@ Set `AGENT` in `config.env`:
 - **`hermes`** *(experimental)* — Python-based
   [NousResearch/hermes-agent](https://github.com/NousResearch/hermes-agent).
   Install (via its official installer, run **non-root** with `--skip-setup`),
-  the non-root systemd unit, and config history are automated. **Network
-  exposure is left MANUAL** — Hermes' bind address / port / Tailscale support
-  isn't documented or verified yet, so the installer prints the exact steps to
-  expose it (find the port, then `tailscale serve <port>`) instead of guessing.
+  the non-root systemd unit, config history, and a bundled-Playwright browser
+  (its system libs auto-installed as root) are automated. **No web exposure** —
+  verified on a live run that `hermes gateway` opens *no* inbound HTTP port
+  (it connects outward to messaging platforms), so there's nothing to
+  Tailscale-Serve. Use Hermes via its CLI/TUI (`hermes`) or by configuring
+  messaging channels (`hermes gateway setup`).
   Both share the same hardened scaffold (unprivileged LXC, non-root user,
   git-backed config history, recovery tools). Config tracked per agent:
   `~/.openclaw/{openclaw.json,exec-approvals.json,cron/jobs.json}` vs
