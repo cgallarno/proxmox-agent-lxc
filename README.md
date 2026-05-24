@@ -97,5 +97,4 @@ systemd/                    gateway + config-watch unit templates (@PLACEHOLDERS
 
 ## License
 
-No license file yet — add one before publishing (MIT is a reasonable default for
-this kind of tooling).
+MIT — see [LICENSE](LICENSE).
