@@ -160,6 +160,15 @@ EOF
 chmod 755 "/usr/local/bin/r${AGENT}"
 ok "root wrapper installed: r${AGENT} (runs ${AGENT} as ${OC_USER})"
 
+# Ensure /usr/local/bin is on root's interactive PATH. `pct enter` spawns a
+# NON-login shell (skips /etc/profile), so r<agent> / agent-config-* wouldn't be
+# found by bare name without this. Cover non-login (.bashrc) + login (profile.d).
+PATH_LINE='export PATH="/usr/local/bin:$PATH"'
+grep -qxF "$PATH_LINE" /root/.bashrc 2>/dev/null || echo "$PATH_LINE" >> /root/.bashrc
+echo "$PATH_LINE" > /etc/profile.d/usr-local-bin.sh
+chmod 644 /etc/profile.d/usr-local-bin.sh
+ok "ensured /usr/local/bin on root PATH (pct enter + login shells)"
+
 subst() { sed -e "s|@OC_USER@|$OC_USER|g" -e "s|@OC_HOME@|$OC_HOME|g" \
               -e "s|@AGENT_CMD@|$AGENT_CMD|g" -e "s|@AGENT_PATH@|$AGENT_PATH|g" "$1"; }
 subst "$REPO_ROOT/systemd/agent-gateway.service"      > /etc/systemd/system/agent-gateway.service
