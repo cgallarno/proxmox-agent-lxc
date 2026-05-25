@@ -161,6 +161,16 @@ EOF
 chmod 755 "/usr/local/bin/r${AGENT}"
 ok "root wrapper installed: r${AGENT} (runs ${AGENT} as ${OC_USER})"
 
+# General-purpose helper: run any command as the agent user with its env.
+# e.g. `as_hermes signal-cli ...`, `as_hermes git -C ~/.hermes status`
+cat > "/usr/local/bin/as_${OC_USER}" <<EOF
+#!/bin/sh
+cd ${OC_HOME}
+exec runuser -u ${OC_USER} -- env HOME=${OC_HOME} PATH=${AGENT_PATH} "\$@"
+EOF
+chmod 755 "/usr/local/bin/as_${OC_USER}"
+ok "root helper installed: as_${OC_USER} (runs any command as ${OC_USER})"
+
 # Ensure /usr/local/bin is on root's interactive PATH. `pct enter` spawns a
 # NON-login shell (skips /etc/profile), so r<agent> / agent-config-* wouldn't be
 # found by bare name without this. Cover non-login (.bashrc) + login (profile.d).
