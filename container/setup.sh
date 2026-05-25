@@ -154,6 +154,8 @@ install -m 755 "$REPO_ROOT/bin/agent-config-log"     /usr/local/bin/agent-config
 cat > "/usr/local/bin/r${AGENT}" <<EOF
 #!/bin/sh
 # Run ${AGENT} as the non-root '${OC_USER}' user with its correct HOME/PATH.
+# cd first so the agent's cwd is its home, not wherever root invoked us from.
+cd ${OC_HOME}
 exec runuser -u ${OC_USER} -- env HOME=${OC_HOME} PATH=${AGENT_PATH} ${AGENT_CMD} "\$@"
 EOF
 chmod 755 "/usr/local/bin/r${AGENT}"
