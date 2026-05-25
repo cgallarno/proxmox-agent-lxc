@@ -99,6 +99,13 @@ GIT_SSH_KEY=${CONFIG_GIT_SSH_KEY:-}
 EOF
 chmod 644 /etc/agent-lxc.env
 
+# ── Tailscale (always installed for all agents / all exposure modes) ─────────
+log "Tailscale"
+curl -fsSL https://tailscale.com/install.sh | sh >/dev/null 2>&1
+[[ -n "${TAILSCALE_AUTHKEY:-}" ]] && tailscale up --authkey="${TAILSCALE_AUTHKEY}" --hostname="${CT_HOSTNAME:-$OC_USER}" >/dev/null 2>&1 || true
+tailscale set --operator="$OC_USER" >/dev/null 2>&1 || true
+ok "Tailscale installed; operator=$OC_USER"
+
 # ── exposure (OpenClaw: automated; hermes: manual, printed at end) ──────────
 if [[ "$AGENT" == "openclaw" ]]; then
   log "Gateway exposure (mode: $EXPOSURE_MODE)"
@@ -106,9 +113,6 @@ if [[ "$AGENT" == "openclaw" ]]; then
   as_agent "$AGENT_CMD" config set gateway.bind loopback >/dev/null
   case "$EXPOSURE_MODE" in
     tailscale)
-      curl -fsSL https://tailscale.com/install.sh | sh >/dev/null 2>&1
-      [[ -n "${TAILSCALE_AUTHKEY:-}" ]] && tailscale up --authkey="${TAILSCALE_AUTHKEY}" --hostname="${CT_HOSTNAME:-$OC_USER}" >/dev/null 2>&1 || true
-      tailscale set --operator="$OC_USER" >/dev/null 2>&1 || true
       as_agent "$AGENT_CMD" config set gateway.tailscale.mode serve >/dev/null
       as_agent "$AGENT_CMD" config set gateway.auth.mode none >/dev/null
       as_agent "$AGENT_CMD" config set gateway.trustedProxies '["127.0.0.1","::1"]' --strict-json >/dev/null
@@ -127,11 +131,6 @@ if [[ "$AGENT" == "openclaw" ]]; then
       ;;
     *) echo "unknown EXPOSURE_MODE: $EXPOSURE_MODE"; exit 1 ;;
   esac
-elif [[ "$EXPOSURE_MODE" == "tailscale" ]]; then
-  # hermes: install Tailscale + set operator now; actual serve is manual (port unknown).
-  curl -fsSL https://tailscale.com/install.sh | sh >/dev/null 2>&1 || true
-  [[ -n "${TAILSCALE_AUTHKEY:-}" ]] && tailscale up --authkey="${TAILSCALE_AUTHKEY}" --hostname="${CT_HOSTNAME:-$OC_USER}" >/dev/null 2>&1 || true
-  tailscale set --operator="$OC_USER" >/dev/null 2>&1 || true
 fi
 
 # ── config history: git repo + recovery tools + systemd units ───────────────
@@ -238,16 +237,20 @@ fi
 as_agent /usr/local/bin/agent-config-push || true
 
 # ── exposure follow-up ───────────────────────────────────────────────────────
-if [[ "$AGENT" == "openclaw" && "$EXPOSURE_MODE" == "tailscale" ]] && ! tailscale status >/dev/null 2>&1; then
+if ! tailscale status >/dev/null 2>&1; then
   cat <<EOF
 
   ┌─ ACTION REQUIRED ─ Tailscale installed but not logged in ─────────────────
   │   pct exec <vmid> -- tailscale up --hostname=${CT_HOSTNAME:-$OC_USER}
   │   pct exec <vmid> -- tailscale set --operator=${OC_USER}    # AFTER 'up'
+EOF
+  if [[ "$AGENT" == "openclaw" && "$EXPOSURE_MODE" == "tailscale" ]]; then
+    cat <<EOF
   │   pct exec <vmid> -- systemctl restart agent-gateway
   │   pct exec <vmid> -- tailscale serve status                 # allow ~30s
-  └───────────────────────────────────────────────────────────────────────────
 EOF
+  fi
+  echo "  └───────────────────────────────────────────────────────────────────────────"
 fi
 
 if [[ "$AGENT" == "hermes" ]]; then
@@ -256,8 +259,9 @@ if [[ "$AGENT" == "hermes" ]]; then
   ┌─ hermes-agent access ─ messaging-only gateway, no inbound web port ───────
   │ Verified (live test): 'hermes gateway' opens NO local HTTP port — it
   │ connects OUT to messaging platforms, so there is nothing to Tailscale-Serve
-  │ and no dashboard to bind. Use Hermes via (no sudo in this LXC — use the
-  │ r${AGENT} wrapper):
+  │ and no dashboard to bind. Tailscale IS installed (use it for SSH/LAN access
+  │ or future needs). Use Hermes via (no sudo in this LXC — use the r${AGENT}
+  │ wrapper):
   │   • Pick a model:  pct enter <vmid> ; r${AGENT} model
   │   • Chat (TUI):    r${AGENT}
   │   • Messaging:     r${AGENT} gateway setup

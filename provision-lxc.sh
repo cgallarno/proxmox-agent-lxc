@@ -71,15 +71,13 @@ pct create "$VMID" "${TMPL_STORAGE}:vztmpl/${TEMPLATE}" \
   --start 0
 c_ok "Container created (unprivileged, nesting+keyctl for chromium sandbox/userns)."
 
-# Tailscale in an unprivileged LXC needs the TUN device.
-if [[ "${EXPOSURE_MODE:-}" == "tailscale" ]]; then
-  CONF="/etc/pve/lxc/${VMID}.conf"
-  grep -q '/dev/net/tun' "$CONF" 2>/dev/null || cat >> "$CONF" <<'TUN'
+# Tailscale requires /dev/net/tun — always add it regardless of EXPOSURE_MODE or AGENT.
+CONF="/etc/pve/lxc/${VMID}.conf"
+grep -q '/dev/net/tun' "$CONF" 2>/dev/null || cat >> "$CONF" <<'TUN'
 lxc.cgroup2.devices.allow: c 10:200 rwm
 lxc.mount.entry: /dev/net/tun dev/net/tun none bind,create=file
 TUN
-  c_ok "Added /dev/net/tun passthrough for Tailscale."
-fi
+c_ok "Added /dev/net/tun passthrough for Tailscale."
 
 pct start "$VMID"; sleep 3
 
