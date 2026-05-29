@@ -1,4 +1,4 @@
-# openclaw-lxc-hardened
+# proxmox-agent-lxc
 
 Provision a **hardened, headless AI agent** in an **unprivileged** Proxmox LXC
 — non-root, Tailscale-connected, with git-backed config history and one-command
