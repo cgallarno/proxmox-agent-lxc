@@ -19,6 +19,7 @@ OC_USER="${OC_USER:-openclaw}"
 EXPOSURE_MODE="${EXPOSURE_MODE:-tailscale}"
 ENABLE_BROWSER="${ENABLE_BROWSER:-true}"
 ENABLE_SIGNAL="${ENABLE_SIGNAL:-false}"
+ENABLE_AGENT_JOURNAL_READ="${ENABLE_AGENT_JOURNAL_READ:-false}"
 
 OC_HOME="/var/lib/${OC_USER}"
 AGENT_REPO="${OC_HOME}/agent-config"
@@ -57,6 +58,11 @@ if ! id "$OC_USER" >/dev/null 2>&1; then
 fi
 install -d -o "$OC_USER" -g "$OC_USER" -m 700 "$AGENT_REPO"
 ok "user + repo dir ready ($OC_HOME)"
+
+if [[ "$ENABLE_AGENT_JOURNAL_READ" == "true" ]]; then
+  usermod -aG systemd-journal "$OC_USER"
+  ok "$OC_USER added to systemd-journal group (can read journalctl)"
+fi
 
 # ── install the agent (sets AGENT_CMD / AGENT_LIVE / TRACKED_FILES / AGENT_PATH) ──
 if [[ "$AGENT" == "openclaw" ]]; then
@@ -148,6 +154,7 @@ fi
 install -m 755 "$REPO_ROOT/bin/agent-config-push"    /usr/local/bin/agent-config-push
 install -m 755 "$REPO_ROOT/bin/agent-config-restore" /usr/local/bin/agent-config-restore
 install -m 755 "$REPO_ROOT/bin/agent-config-log"     /usr/local/bin/agent-config-log
+install -m 755 "$REPO_ROOT/bin/agent-gateway-status" /usr/local/bin/agent-gateway-status
 
 # Root convenience wrapper: run the agent as the non-root user (this minimal
 # LXC has no sudo). e.g. `ropenclaw config get gateway`, `rhermes setup`.
@@ -199,6 +206,55 @@ subst "$REPO_ROOT/systemd/agent-config-watch.service" > /etc/systemd/system/agen
 } > /etc/systemd/system/agent-config-watch.path
 ok "installed recovery tools + systemd units"
 
+# Seed AGENTS.md for hermes so it knows its operating environment without relying
+# on prior session memory. Placed in OC_HOME (workspace root hermes checks first).
+if [[ "$AGENT" == "hermes" ]]; then
+  JOURNAL_NOTE="journalctl requires root or the systemd-journal group."
+  [[ "$ENABLE_AGENT_JOURNAL_READ" == "true" ]] && \
+    JOURNAL_NOTE="journalctl -u agent-gateway is readable as ${OC_USER} (systemd-journal group)."
+  SIGNAL_NOTE=""
+  [[ "$ENABLE_SIGNAL" == "true" ]] && \
+    SIGNAL_NOTE=$'\n\n## Signal integration\n\nagent-signal.service manages the signal-cli daemon. Create\n'"${AGENT_LIVE}/signal.env"$' with SIGNAL_ACCOUNT and SIGNAL_HTTP_LISTEN\nbefore starting it. agent-gateway.service starts after it when Signal is enabled.'
+
+  cat > "${OC_HOME}/AGENTS.md" <<EOF
+# AGENTS.md — Local Operations Context
+
+This Hermes instance runs inside a hardened, unprivileged Proxmox LXC container
+provisioned by proxmox-agent-lxc. Read this before taking any infra actions.
+
+## Gateway management
+
+The gateway is a **systemd system service** — NOT a user service.
+\`hermes gateway restart\` targets a user systemd session that does not exist
+for the \`${OC_USER}\` system account. Do not use it as a control plane here.
+
+Self-inspection (${OC_USER} user can run these):
+  systemctl status agent-gateway
+  systemctl is-active agent-gateway
+  agent-gateway-status              # compact health: gateway + signal + logs
+
+Restart/stop/start requires root (operator action):
+  systemctl {restart,stop,start} agent-gateway
+
+## Log access
+
+${JOURNAL_NOTE}
+Gateway log file (always readable): ${AGENT_LIVE}/logs/gateway.log
+agent-gateway-status shows recent log lines without needing journal access.
+
+## Root helpers (available in operator root shells)
+
+  as_${OC_USER} <cmd>      run any command as ${OC_USER} with correct env+PATH
+  r${AGENT} <args>         run ${AGENT} binary as ${OC_USER}
+  agent-gateway-status     compact health view
+  agent-config-log         git log of tracked config changes
+  agent-config-restore     restore config from git history
+${SIGNAL_NOTE}
+EOF
+  chown "${OC_USER}:${OC_USER}" "${OC_HOME}/AGENTS.md"
+  ok "seeded ${OC_HOME}/AGENTS.md with local ops context"
+fi
+
 # ── optional: headless browser ──────────────────────────────────────────────
 if [[ "$ENABLE_BROWSER" == "true" ]]; then
   log "Headless browser"
@@ -233,6 +289,19 @@ if [[ "$ENABLE_SIGNAL" == "true" ]]; then
   ln -sf /opt/signal-cli /usr/local/bin/signal-cli
   rm -f /tmp/sigcli.tar.gz /tmp/signal-cli
   ok "signal-cli ${SC_VER} installed — register manually: signal-cli -a <+E164> register"
+
+  # Install signal-cli daemon as a systemd service (hermes only).
+  # The service won't start until ${AGENT_LIVE}/signal.env is created with
+  # SIGNAL_ACCOUNT=+E164 and SIGNAL_HTTP_LISTEN=127.0.0.1:8080
+  if [[ "$AGENT" == "hermes" ]]; then
+    subst "$REPO_ROOT/systemd/agent-signal.service" > /etc/systemd/system/agent-signal.service
+    systemctl enable agent-signal.service
+    # Make gateway wait for signal daemon to be up before starting
+    sed -i '/^\[Service\]/i Wants=agent-signal.service' /etc/systemd/system/agent-gateway.service
+    sed -i '/^\[Service\]/i After=agent-signal.service'  /etc/systemd/system/agent-gateway.service
+    ok "agent-signal.service enabled; agent-gateway.service will start after it"
+    warn "Create ${AGENT_LIVE}/signal.env with SIGNAL_ACCOUNT + SIGNAL_HTTP_LISTEN, then: systemctl start agent-signal"
+  fi
 fi
 
 # ── enable services ─────────────────────────────────────────────────────────

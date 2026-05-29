@@ -1,0 +1,31 @@
+[Unit]
+Description=signal-cli JSON-RPC daemon for agent Signal integration
+After=network-online.target
+Wants=network-online.target
+# Only start once the account env file exists (populated after signal-cli register/verify).
+ConditionPathExists=@OC_HOME@/.hermes/signal.env
+
+[Service]
+Type=simple
+User=@OC_USER@
+Group=@OC_USER@
+Environment=HOME=@OC_HOME@
+# Create this file after registration: SIGNAL_ACCOUNT=+1… and SIGNAL_HTTP_LISTEN=127.0.0.1:8080
+EnvironmentFile=@OC_HOME@/.hermes/signal.env
+ExecStart=/usr/local/bin/signal-cli -a ${SIGNAL_ACCOUNT} daemon --http ${SIGNAL_HTTP_LISTEN:-127.0.0.1:8080}
+Restart=on-failure
+RestartSec=30
+StartLimitIntervalSec=300
+StartLimitBurst=5
+
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ProtectHome=true
+ReadWritePaths=@OC_HOME@
+ProtectControlGroups=true
+ProtectKernelTunables=true
+RestrictSUIDSGID=true
+
+[Install]
+WantedBy=multi-user.target

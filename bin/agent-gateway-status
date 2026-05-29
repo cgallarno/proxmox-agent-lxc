@@ -1,0 +1,47 @@
+#!/usr/bin/env bash
+# agent-gateway-status — compact health snapshot for operator and agent self-diagnosis.
+# Runnable as root or the agent user. Needs /etc/agent-lxc.env (written by setup.sh).
+
+# shellcheck source=/dev/null
+source /etc/agent-lxc.env 2>/dev/null || true
+LIVE="${AGENT_LIVE:-/var/lib/hermes/.hermes}"
+
+fmt_pid() { local p="${1:-0}"; [[ "$p" == "0" || -z "$p" ]] && echo "—" || echo "$p"; }
+
+echo "=== agent-gateway ==="
+gw_state=$(systemctl is-active agent-gateway 2>/dev/null || echo "unknown")
+gw_pid=$(systemctl show agent-gateway --property=MainPID --value 2>/dev/null | head -1)
+echo "  state : $gw_state   pid: $(fmt_pid "$gw_pid")"
+
+if systemctl cat agent-signal >/dev/null 2>&1; then
+  echo
+  echo "=== agent-signal (signal-cli daemon) ==="
+  sig_state=$(systemctl is-active agent-signal 2>/dev/null || echo "unknown")
+  sig_pid=$(systemctl show agent-signal --property=MainPID --value 2>/dev/null | head -1)
+  echo "  state : $sig_state   pid: $(fmt_pid "$sig_pid")"
+
+  # Load signal env for the HTTP listen address (non-fatal if missing)
+  # shellcheck source=/dev/null
+  source "${LIVE}/signal.env" 2>/dev/null || true
+  LISTEN="${SIGNAL_HTTP_LISTEN:-127.0.0.1:8080}"
+  if curl -sf --max-time 2 "http://${LISTEN}/v1/about" >/dev/null 2>&1; then
+    echo "  http  : responding on ${LISTEN}"
+  else
+    echo "  http  : no response on ${LISTEN}"
+  fi
+fi
+
+# Hermes gateway log
+LOG="${LIVE}/logs/gateway.log"
+if [[ -f "$LOG" ]]; then
+  echo
+  echo "=== gateway log (last 5 lines) ==="
+  tail -5 "$LOG"
+fi
+
+# Journal — only if accessible (requires systemd-journal group or root)
+if journalctl -u agent-gateway -n 1 --no-pager >/dev/null 2>&1; then
+  echo
+  echo "=== journal: agent-gateway (last 5) ==="
+  journalctl -u agent-gateway -n 5 --no-pager --output=short
+fi
