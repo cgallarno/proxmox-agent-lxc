@@ -11,7 +11,16 @@ fmt_pid() { local p="${1:-0}"; [[ "$p" == "0" || -z "$p" ]] && echo "—" || ech
 echo "=== agent-gateway ==="
 gw_state=$(systemctl is-active agent-gateway 2>/dev/null || echo "unknown")
 gw_pid=$(systemctl show agent-gateway --property=MainPID --value 2>/dev/null | head -1)
-echo "  state : $gw_state   pid: $(fmt_pid "$gw_pid")"
+echo "  default : $gw_state   pid: $(fmt_pid "$gw_pid")"
+
+while IFS= read -r unit; do
+  [[ -n "$unit" ]] || continue
+  profile="${unit#agent-gateway@}"
+  profile="${profile%.service}"
+  state=$(systemctl is-active "$unit" 2>/dev/null || echo "unknown")
+  pid=$(systemctl show "$unit" --property=MainPID --value 2>/dev/null | head -1)
+  echo "  ${profile} : $state   pid: $(fmt_pid "$pid")"
+done < <(systemctl list-units 'agent-gateway@*.service' --all --no-legend --plain 2>/dev/null | awk '{print $1}')
 
 if systemctl cat agent-signal >/dev/null 2>&1; then
   echo

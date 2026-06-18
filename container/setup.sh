@@ -20,6 +20,7 @@ EXPOSURE_MODE="${EXPOSURE_MODE:-tailscale}"
 ENABLE_BROWSER="${ENABLE_BROWSER:-true}"
 ENABLE_SIGNAL="${ENABLE_SIGNAL:-false}"
 ENABLE_AGENT_JOURNAL_READ="${ENABLE_AGENT_JOURNAL_READ:-false}"
+ENABLE_HERMES_GATEWAY_CONTROL="${ENABLE_HERMES_GATEWAY_CONTROL:-false}"
 
 OC_HOME="/var/lib/${OC_USER}"
 AGENT_REPO="${OC_HOME}/agent-config"
@@ -43,11 +44,19 @@ esac
 log "Base packages ($AGENT)"
 export DEBIAN_FRONTEND=noninteractive
 apt-get update -qq
-apt-get install -y -qq curl ca-certificates gnupg git jq >/dev/null
+# util-linux provides runuser on Debian-family minimal containers. The root
+# wrappers below depend on it; without this, `as_hermes ...` fails with
+# `/usr/local/bin/as_hermes: exec: runuser: not found`.
+apt-get install -y -qq curl ca-certificates gnupg git jq util-linux >/dev/null
 if [[ "$AGENT" == "hermes" ]]; then
   # Pre-install build deps + tools so the non-root hermes installer is
   # self-sufficient (it can't sudo as our nologin agent user).
   apt-get install -y -qq build-essential python3-dev libffi-dev ripgrep ffmpeg >/dev/null
+  if [[ "$ENABLE_HERMES_GATEWAY_CONTROL" == "true" ]]; then
+    # Optional, narrowly-scoped privilege bridge: lets the Hermes user run only
+    # /usr/local/sbin/hermes-gateway-control via sudo, not arbitrary root cmds.
+    apt-get install -y -qq sudo >/dev/null
+  fi
 fi
 ok "base packages ready"
 
@@ -155,9 +164,20 @@ install -m 755 "$REPO_ROOT/bin/agent-config-push"    /usr/local/bin/agent-config
 install -m 755 "$REPO_ROOT/bin/agent-config-restore" /usr/local/bin/agent-config-restore
 install -m 755 "$REPO_ROOT/bin/agent-config-log"     /usr/local/bin/agent-config-log
 install -m 755 "$REPO_ROOT/bin/agent-gateway-status" /usr/local/bin/agent-gateway-status
+if [[ "$AGENT" == "hermes" ]]; then
+  install -m 755 "$REPO_ROOT/bin/hermes-gateway-control" /usr/local/sbin/hermes-gateway-control
+  if [[ "$ENABLE_HERMES_GATEWAY_CONTROL" == "true" ]]; then
+    cat > /etc/sudoers.d/hermes-gateway-control <<EOF
+${OC_USER} ALL=(root) NOPASSWD: /usr/local/sbin/hermes-gateway-control *
+EOF
+    chmod 440 /etc/sudoers.d/hermes-gateway-control
+    ok "enabled narrow sudo helper: hermes-gateway-control (Hermes gateway units only)"
+  fi
+fi
 
-# Root convenience wrapper: run the agent as the non-root user (this minimal
-# LXC has no sudo). e.g. `ropenclaw config get gateway`, `rhermes setup`.
+# Root convenience wrapper: run the agent as the non-root user. e.g.
+# `ropenclaw config get gateway`, `rhermes setup`. This does not require sudo;
+# sudo is only installed for Hermes when ENABLE_HERMES_GATEWAY_CONTROL=true.
 cat > "/usr/local/bin/r${AGENT}" <<EOF
 #!/bin/sh
 # Run ${AGENT} as the non-root '${OC_USER}' user with its correct HOME/PATH.
@@ -190,6 +210,9 @@ ok "ensured /usr/local/bin on root PATH (pct enter + login shells)"
 subst() { sed -e "s|@OC_USER@|$OC_USER|g" -e "s|@OC_HOME@|$OC_HOME|g" \
               -e "s|@AGENT_CMD@|$AGENT_CMD|g" -e "s|@AGENT_PATH@|$AGENT_PATH|g" "$1"; }
 subst "$REPO_ROOT/systemd/agent-gateway.service"      > /etc/systemd/system/agent-gateway.service
+if [[ "$AGENT" == "hermes" && -f "$REPO_ROOT/systemd/agent-gateway@.service" ]]; then
+  subst "$REPO_ROOT/systemd/agent-gateway@.service" > /etc/systemd/system/agent-gateway@.service
+fi
 subst "$REPO_ROOT/systemd/agent-config-watch.service" > /etc/systemd/system/agent-config-watch.service
 
 # Generate the .path watcher from the agent's tracked-file list.
@@ -235,6 +258,25 @@ Self-inspection (${OC_USER} user can run these):
 
 Restart/stop/start requires root (operator action):
   systemctl {restart,stop,start} agent-gateway
+
+For non-default Hermes profiles, use the systemd instance unit instead of
+Hermes' user-service control plane:
+  systemctl enable --now agent-gateway@PROFILE.service
+  systemctl restart agent-gateway@PROFILE.service
+  systemctl status agent-gateway@PROFILE.service
+
+Example:
+  systemctl enable --now agent-gateway@gallarno-tech.service
+  systemctl restart agent-gateway@gallarno-tech.service
+
+If ENABLE_HERMES_GATEWAY_CONTROL=true was set at provisioning time, ${OC_USER}
+can use the narrow sudo helper instead of full root access:
+  sudo /usr/local/sbin/hermes-gateway-control restart gallarno-tech
+  sudo /usr/local/sbin/hermes-gateway-control status gallarno-tech
+
+Do not use `hermes --profile PROFILE gateway start/restart` in this LXC unless
+you have deliberately configured user linger; it tries to reach systemd --user
+and fails for this system account.
 
 ## Log access
 

@@ -87,12 +87,15 @@ Tailscale, git-backed config history, recovery tools.
 
 ## Day-to-day operations
 
-The container ships **no `sudo`**. Two root helpers are installed:
+The container ships **no broad `sudo`**. These root/operator helpers are installed:
 
 - **`r<agent>`** (`ropenclaw` / `rhermes`) — runs the agent binary as the
   non-root user, cwd set to agent home.
 - **`as_<user>`** (`as_openclaw` / `as_hermes`) — runs *any* command as the
   agent user with the correct `HOME` and `PATH`. More general than `r<agent>`.
+- **`hermes-gateway-control`** *(Hermes only, optional)* — when
+  `ENABLE_HERMES_GATEWAY_CONTROL=true`, lets the Hermes user restart/status only
+  the provisioner's gateway systemd units via narrow sudo.
 
 ### Gateway (start / stop / restart)
 
@@ -109,6 +112,37 @@ systemctl start agent-gateway
 > `rhermes gateway restart` tells hermes-agent's internal process manager to
 > restart — it may work, but `systemctl restart agent-gateway` is what
 > controls the actual unit and is always correct for both agents.
+
+For extra Hermes profiles, run a separate systemd system-service instance:
+
+```bash
+systemctl enable --now agent-gateway@gallarno-tech.service
+systemctl restart agent-gateway@gallarno-tech.service
+systemctl status agent-gateway@gallarno-tech.service
+```
+
+Do **not** rely on `hermes --profile gallarno-tech gateway start/restart` inside
+this hardened LXC. The agent user is a system account without user linger, so
+Hermes' user-service control path cannot reach `systemctl --user` unless you
+explicitly enable linger. System instances avoid that whole tiny clown car.
+
+If you want Hermes itself to be able to restart those system units, enable the
+Hermes-only narrow helper at provisioning time:
+
+```bash
+ENABLE_HERMES_GATEWAY_CONTROL="true"
+```
+
+That installs `sudo` only to allow the agent user to run:
+
+```bash
+sudo /usr/local/sbin/hermes-gateway-control restart gallarno-tech
+sudo /usr/local/sbin/hermes-gateway-control status gallarno-tech
+```
+
+The helper validates the action/profile and only targets
+`agent-gateway.service` or `agent-gateway@<profile>.service`; it is not a
+blank-check `NOPASSWD:ALL` situation, because we are not animals.
 
 Config watcher (auto-commits config changes to git):
 

@@ -16,6 +16,11 @@ ExecStart=@AGENT_CMD@ gateway
 Restart=on-failure
 RestartSec=5
 
+# Note: this unit controls the default Hermes profile only. Additional Hermes
+# profiles should be run as systemd *system* instances via
+# agent-gateway@<profile>.service, not via `hermes --profile <p> gateway start`,
+# because the non-login system user has no user D-Bus / linger session.
+
 # Hardening — least privilege for an exec-capable agent on untrusted input.
 NoNewPrivileges=true
 PrivateTmp=true
