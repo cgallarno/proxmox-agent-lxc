@@ -1,0 +1,29 @@
+[Unit]
+Description=Hermes gateway profile %i (hardened, non-root)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=@OC_USER@
+Group=@OC_USER@
+Environment=HOME=@OC_HOME@
+Environment=NODE_ENV=production
+Environment=PATH=@AGENT_PATH@
+WorkingDirectory=@OC_HOME@
+ExecStart=@AGENT_CMD@ --profile %i gateway
+Restart=on-failure
+RestartSec=5
+
+# Same hardening as the default gateway unit.
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ProtectHome=true
+ReadWritePaths=@OC_HOME@
+ProtectControlGroups=true
+ProtectKernelTunables=true
+RestrictSUIDSGID=true
+
+[Install]
+WantedBy=multi-user.target

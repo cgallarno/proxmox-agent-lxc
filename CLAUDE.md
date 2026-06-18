@@ -39,7 +39,7 @@ provision-lxc.sh         →      container/setup.sh
 
 ### Systemd units — templates with placeholders
 
-`systemd/agent-gateway.service` and `agent-config-watch.service` contain `@OC_USER@`, `@OC_HOME@`, `@AGENT_CMD@`, `@AGENT_PATH@` placeholders. `setup.sh` renders them via `sed` into `/etc/systemd/system/`. The `.path` watcher is generated dynamically from `$TRACKED_FILES`. Never edit the rendered copies — edit the templates in `systemd/`.
+`systemd/agent-gateway.service`, `systemd/agent-gateway@.service` (Hermes named profiles), and `agent-config-watch.service` contain `@OC_USER@`, `@OC_HOME@`, `@AGENT_CMD@`, `@AGENT_PATH@` placeholders. `setup.sh` renders them via `sed` into `/etc/systemd/system/`. The `.path` watcher is generated dynamically from `$TRACKED_FILES`. Never edit the rendered copies — edit the templates in `systemd/`.
 
 ### Config history pattern
 
@@ -59,6 +59,7 @@ provision-lxc.sh         →      container/setup.sh
 
 - **`r<agent>`** (`ropenclaw` / `rhermes`) — `cd $OC_HOME && runuser -u $OC_USER -- env HOME=… PATH=… $AGENT_CMD "$@"`. The `cd` is load-bearing: hermes-agent does git operations in cwd; running from `/root` causes EACCES on `/root/.git`.
 - **`as_<OC_USER>`** (`as_openclaw` / `as_hermes`) — same env setup but takes an arbitrary command, not the agent binary.
+- **`hermes-gateway-control`** — Hermes-only root helper. If `ENABLE_HERMES_GATEWAY_CONTROL=true`, sudoers allows only this helper so `$OC_USER` can manage `agent-gateway.service` and `agent-gateway@<profile>.service` without broad sudo.
 
 ## Key constraints
 

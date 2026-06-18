@@ -107,6 +107,7 @@ pct exec "$VMID" -- env \
   CONFIG_GIT_SSH_KEY="${CONFIG_GIT_SSH_KEY:-}" \
   ENABLE_BROWSER="${ENABLE_BROWSER:-true}" \
   ENABLE_SIGNAL="${ENABLE_SIGNAL:-false}" \
+  ENABLE_HERMES_GATEWAY_CONTROL="${ENABLE_HERMES_GATEWAY_CONTROL:-false}" \
   bash /opt/openclaw-lxc-hardened/container/setup.sh
 
 c_ok "Setup complete."

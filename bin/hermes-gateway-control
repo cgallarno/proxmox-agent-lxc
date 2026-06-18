@@ -1,0 +1,66 @@
+#!/usr/bin/env bash
+# hermes-gateway-control — narrow root helper for Hermes gateway system units.
+#
+# Intended sudoers exposure (optional, installed by setup.sh when enabled):
+#   hermes ALL=(root) NOPASSWD: /usr/local/sbin/hermes-gateway-control *
+#
+# This deliberately supports only Hermes gateway systemd units created by this
+# LXC provisioner: agent-gateway.service and agent-gateway@<profile>.service.
+
+set -euo pipefail
+
+usage() {
+  cat >&2 <<'EOF'
+Usage: hermes-gateway-control <status|start|stop|restart|enable|disable> [profile]
+
+Examples:
+  hermes-gateway-control status
+  hermes-gateway-control restart
+  hermes-gateway-control enable gallarno-tech
+  hermes-gateway-control restart gallarno-tech
+EOF
+  exit 2
+}
+
+[[ $# -ge 1 && $# -le 2 ]] || usage
+ACTION="$1"
+PROFILE="${2:-}"
+
+# shellcheck source=/dev/null
+source /etc/agent-lxc.env 2>/dev/null || true
+if [[ "${AGENT:-}" != "hermes" ]]; then
+  echo "hermes-gateway-control is only valid when AGENT=hermes" >&2
+  exit 1
+fi
+
+case "$ACTION" in
+  status|start|stop|restart|enable|disable) ;;
+  *) usage ;;
+esac
+
+if [[ -z "$PROFILE" || "$PROFILE" == "default" ]]; then
+  UNIT="agent-gateway.service"
+else
+  # systemd instance names must not be treated as arbitrary input. Keep this
+  # intentionally boring: Hermes profile names we use are simple slugs.
+  if [[ ! "$PROFILE" =~ ^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$ ]]; then
+    echo "invalid Hermes profile name: $PROFILE" >&2
+    exit 2
+  fi
+  UNIT="agent-gateway@${PROFILE}.service"
+fi
+
+case "$ACTION" in
+  status)
+    exec systemctl status "$UNIT" --no-pager
+    ;;
+  start|stop|restart)
+    exec systemctl "$ACTION" "$UNIT"
+    ;;
+  enable)
+    exec systemctl enable --now "$UNIT"
+    ;;
+  disable)
+    exec systemctl disable --now "$UNIT"
+    ;;
+esac
