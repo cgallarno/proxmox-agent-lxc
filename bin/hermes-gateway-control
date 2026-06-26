@@ -1,66 +1,140 @@
-#!/usr/bin/env bash
-# hermes-gateway-control — narrow root helper for Hermes gateway system units.
-#
-# Intended sudoers exposure (optional, installed by setup.sh when enabled):
-#   hermes ALL=(root) NOPASSWD: /usr/local/sbin/hermes-gateway-control *
-#
-# This deliberately supports only Hermes gateway systemd units created by this
-# LXC provisioner: agent-gateway.service and agent-gateway@<profile>.service.
+#!/usr/bin/env python3
+"""Client/helper for controlling provisioner-managed Hermes gateway units.
 
-set -euo pipefail
+As root, this executes systemctl directly. As the Hermes user, it talks to the
+root sidecar at /run/hermes-gateway-control.sock so gateway-spawned sessions can
+request a restart even when their systemd unit has NoNewPrivileges=yes.
+"""
+from __future__ import annotations
 
-usage() {
-  cat >&2 <<'EOF'
-Usage: hermes-gateway-control <status|start|stop|restart|enable|disable> [profile]
+import json
+import os
+import re
+import socket
+import subprocess
+import sys
+from pathlib import Path
 
-Examples:
-  hermes-gateway-control status
-  hermes-gateway-control restart
-  hermes-gateway-control enable gallarno-tech
-  hermes-gateway-control restart gallarno-tech
-EOF
-  exit 2
-}
+SOCKET_PATH = "/run/hermes-gateway-control.sock"
+CLIENT_ACTIONS = {"status", "restart"}
+ROOT_ACTIONS = {"status", "start", "stop", "restart", "enable", "disable"}
+PROFILE_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$")
 
-[[ $# -ge 1 && $# -le 2 ]] || usage
-ACTION="$1"
-PROFILE="${2:-}"
 
-# shellcheck source=/dev/null
-source /etc/agent-lxc.env 2>/dev/null || true
-if [[ "${AGENT:-}" != "hermes" ]]; then
-  echo "hermes-gateway-control is only valid when AGENT=hermes" >&2
-  exit 1
-fi
+def usage() -> None:
+    print(
+        "Usage: hermes-gateway-control <status|restart> [profile]\n"
+        "       hermes-gateway-control <status|start|stop|restart|enable|disable> [profile]  # root only\n\n"
+        "Examples:\n"
+        "  hermes-gateway-control status\n"
+        "  hermes-gateway-control restart gallarno-tech\n",
+        file=sys.stderr,
+    )
+    raise SystemExit(2)
 
-case "$ACTION" in
-  status|start|stop|restart|enable|disable) ;;
-  *) usage ;;
-esac
 
-if [[ -z "$PROFILE" || "$PROFILE" == "default" ]]; then
-  UNIT="agent-gateway.service"
-else
-  # systemd instance names must not be treated as arbitrary input. Keep this
-  # intentionally boring: Hermes profile names we use are simple slugs.
-  if [[ ! "$PROFILE" =~ ^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$ ]]; then
-    echo "invalid Hermes profile name: $PROFILE" >&2
-    exit 2
-  fi
-  UNIT="agent-gateway@${PROFILE}.service"
-fi
+def read_agent_env() -> dict[str, str]:
+    env: dict[str, str] = {}
+    path = Path("/etc/agent-lxc.env")
+    if not path.exists():
+        return env
+    for raw in path.read_text(errors="replace").splitlines():
+        line = raw.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, val = line.split("=", 1)
+        env[key] = val.strip().strip('"').strip("'")
+    return env
 
-case "$ACTION" in
-  status)
-    exec systemctl status "$UNIT" --no-pager
-    ;;
-  start|stop|restart)
-    exec systemctl "$ACTION" "$UNIT"
-    ;;
-  enable)
-    exec systemctl enable --now "$UNIT"
-    ;;
-  disable)
-    exec systemctl disable --now "$UNIT"
-    ;;
-esac
+
+def unit_for(profile: str | None) -> str:
+    if not profile or profile == "default":
+        return "agent-gateway.service"
+    if not PROFILE_RE.match(profile):
+        raise ValueError(f"invalid Hermes profile name: {profile}")
+    return f"agent-gateway@{profile}.service"
+
+
+def run_root(action: str, profile: str | None) -> int:
+    unit = unit_for(profile)
+    if action == "status":
+        cmd = ["systemctl", "status", unit, "--no-pager"]
+    elif action in {"start", "stop", "restart"}:
+        cmd = ["systemctl", action, unit]
+    elif action == "enable":
+        cmd = ["systemctl", "enable", "--now", unit]
+    elif action == "disable":
+        cmd = ["systemctl", "disable", "--now", unit]
+    else:
+        usage()
+    return subprocess.run(cmd).returncode
+
+
+def run_client(action: str, profile: str | None) -> int:
+    if action not in CLIENT_ACTIONS:
+        print(
+            f"action '{action}' requires root; non-root sidecar allows only: "
+            + ", ".join(sorted(CLIENT_ACTIONS)),
+            file=sys.stderr,
+        )
+        return 2
+    # Validate locally too, so bad input never reaches the daemon.
+    unit_for(profile)
+    payload = json.dumps({"action": action, "profile": profile or "default"}).encode() + b"\n"
+    try:
+        with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as sock:
+            sock.settimeout(30)
+            sock.connect(SOCKET_PATH)
+            sock.sendall(payload)
+            chunks: list[bytes] = []
+            while True:
+                chunk = sock.recv(65536)
+                if not chunk:
+                    break
+                chunks.append(chunk)
+    except FileNotFoundError:
+        print(f"sidecar socket not found: {SOCKET_PATH}", file=sys.stderr)
+        print("Start/enable hermes-gateway-control.service from the host/root control plane.", file=sys.stderr)
+        return 1
+    except OSError as exc:
+        print(f"failed to talk to sidecar: {exc}", file=sys.stderr)
+        return 1
+
+    try:
+        response = json.loads(b"".join(chunks).decode())
+    except Exception as exc:
+        print(f"invalid sidecar response: {exc}", file=sys.stderr)
+        return 1
+
+    if response.get("stdout"):
+        print(response["stdout"], end="")
+    if response.get("stderr"):
+        print(response["stderr"], end="", file=sys.stderr)
+    return int(response.get("returncode", 1))
+
+
+def main() -> int:
+    if not (2 <= len(sys.argv) <= 3):
+        usage()
+    action = sys.argv[1]
+    profile = sys.argv[2] if len(sys.argv) == 3 else None
+
+    env = read_agent_env()
+    if env.get("AGENT") != "hermes":
+        print("hermes-gateway-control is only valid when AGENT=hermes", file=sys.stderr)
+        return 1
+
+    allowed = ROOT_ACTIONS if os.geteuid() == 0 else CLIENT_ACTIONS
+    if action not in allowed:
+        usage()
+    try:
+        if os.geteuid() == 0:
+            return run_root(action, profile)
+        return run_client(action, profile)
+    except ValueError as exc:
+        print(str(exc), file=sys.stderr)
+        return 2
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

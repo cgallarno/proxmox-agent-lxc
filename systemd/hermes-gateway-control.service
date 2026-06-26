@@ -1,0 +1,30 @@
+[Unit]
+Description=Hermes gateway control sidecar (root, narrow systemd proxy)
+Documentation=https://github.com/cgallarno/proxmox-agent-lxc
+After=multi-user.target
+ConditionPathExists=/etc/agent-lxc.env
+
+[Service]
+Type=simple
+User=root
+Group=root
+ExecStart=/usr/local/sbin/hermes-gateway-control-daemon
+Restart=on-failure
+RestartSec=2s
+RuntimeDirectory=hermes-gateway-control
+RuntimeDirectoryMode=0755
+
+# Hardening. The daemon remains root so it can call systemctl, but it exposes
+# only a tiny validated command surface on a Unix socket owned by @OC_USER@.
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectHome=read-only
+ProtectSystem=strict
+ReadOnlyPaths=/etc/agent-lxc.env
+ReadWritePaths=/run
+RestrictSUIDSGID=yes
+LockPersonality=yes
+MemoryDenyWriteExecute=yes
+
+[Install]
+WantedBy=multi-user.target

@@ -94,8 +94,8 @@ The container ships **no broad `sudo`**. These root/operator helpers are install
 - **`as_<user>`** (`as_openclaw` / `as_hermes`) — runs *any* command as the
   agent user with the correct `HOME` and `PATH`. More general than `r<agent>`.
 - **`hermes-gateway-control`** *(Hermes only, optional)* — when
-  `ENABLE_HERMES_GATEWAY_CONTROL=true`, lets the Hermes user restart/status only
-  the provisioner's gateway systemd units via narrow sudo.
+  `ENABLE_HERMES_GATEWAY_CONTROL=true`, lets the Hermes user status/restart only
+  the provisioner's gateway systemd units through a root sidecar Unix socket.
 
 ### Gateway (start / stop / restart)
 
@@ -126,23 +126,39 @@ this hardened LXC. The agent user is a system account without user linger, so
 Hermes' user-service control path cannot reach `systemctl --user` unless you
 explicitly enable linger. System instances avoid that whole tiny clown car.
 
-If you want Hermes itself to be able to restart those system units, enable the
-Hermes-only narrow helper at provisioning time:
+If you want Hermes itself to be able to restart those system units even from a
+gateway-delivered session, enable the Hermes-only sidecar at provisioning time:
 
 ```bash
 ENABLE_HERMES_GATEWAY_CONTROL="true"
 ```
 
-That installs `sudo` only to allow the agent user to run:
+That installs `hermes-gateway-control.service`, a root daemon listening on a
+restricted Unix socket owned by the Hermes user. The non-root client can then
+run:
 
 ```bash
-sudo /usr/local/sbin/hermes-gateway-control restart gallarno-tech
-sudo /usr/local/sbin/hermes-gateway-control status gallarno-tech
+/usr/local/sbin/hermes-gateway-control restart gallarno-tech
+/usr/local/sbin/hermes-gateway-control status gallarno-tech
 ```
 
-The helper validates the action/profile and only targets
-`agent-gateway.service` or `agent-gateway@<profile>.service`; it is not a
-blank-check `NOPASSWD:ALL` situation, because we are not animals.
+The sidecar validates the action/profile and only proxies `status` and
+`restart` for `agent-gateway.service` or `agent-gateway@<profile>.service`.
+It does not expose a shell, does not use broad sudo, and still works when the
+gateway unit has `NoNewPrivileges=yes`.
+
+For an existing Hermes LXC, install the sidecar from the Proxmox host after
+pulling this repo:
+
+```bash
+VMID=153
+pct push "$VMID" bin/hermes-gateway-control /usr/local/sbin/hermes-gateway-control --perms 755
+pct push "$VMID" bin/hermes-gateway-control-daemon /usr/local/sbin/hermes-gateway-control-daemon --perms 755
+pct push "$VMID" systemd/hermes-gateway-control.service /etc/systemd/system/hermes-gateway-control.service
+pct exec "$VMID" -- systemctl daemon-reload
+pct exec "$VMID" -- systemctl enable --now hermes-gateway-control.service
+pct exec "$VMID" -- runuser -u hermes -- /usr/local/sbin/hermes-gateway-control status gallarno-tech
+```
 
 Config watcher (auto-commits config changes to git):
 
