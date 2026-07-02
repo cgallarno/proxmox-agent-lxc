@@ -161,6 +161,9 @@ install -m 755 "$REPO_ROOT/bin/agent-config-push"    /usr/local/bin/agent-config
 install -m 755 "$REPO_ROOT/bin/agent-config-restore" /usr/local/bin/agent-config-restore
 install -m 755 "$REPO_ROOT/bin/agent-config-log"     /usr/local/bin/agent-config-log
 install -m 755 "$REPO_ROOT/bin/agent-gateway-status" /usr/local/bin/agent-gateway-status
+if [[ -f "$REPO_ROOT/bin/signal-hermes-daemon" ]]; then
+  install -m 755 "$REPO_ROOT/bin/signal-hermes-daemon" /usr/local/bin/signal-hermes-daemon
+fi
 if [[ "$AGENT" == "hermes" ]]; then
   install -m 755 "$REPO_ROOT/bin/hermes-gateway-control" /usr/local/sbin/hermes-gateway-control
   install -m 755 "$REPO_ROOT/bin/hermes-gateway-control-daemon" /usr/local/sbin/hermes-gateway-control-daemon
@@ -230,7 +233,7 @@ if [[ "$AGENT" == "hermes" ]]; then
     JOURNAL_NOTE="journalctl -u agent-gateway is readable as ${OC_USER} (systemd-journal group)."
   SIGNAL_NOTE=""
   [[ "$ENABLE_SIGNAL" == "true" ]] && \
-    SIGNAL_NOTE=$'\n\n## Signal integration\n\nagent-signal.service manages the signal-cli daemon. Create\n'"${AGENT_LIVE}/signal.env"$' with SIGNAL_ACCOUNT and SIGNAL_HTTP_LISTEN\nbefore starting it. agent-gateway.service starts after it when Signal is enabled.'
+    SIGNAL_NOTE=$'\n\n## Signal integration\n\nagent-signal.service manages the signal-cli daemon. Create\n'"${AGENT_LIVE}/signal.env"$' with SIGNAL_ACCOUNT and SIGNAL_HTTP_LISTEN\nbefore starting it. Use /usr/local/bin/signal-hermes-daemon for manual starts;\nagent-gateway.service starts after it when Signal is enabled.'
 
   cat > "${OC_HOME}/AGENTS.md" <<EOF
 # AGENTS.md — Local Operations Context
