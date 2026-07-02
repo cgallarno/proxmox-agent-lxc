@@ -12,7 +12,7 @@ Group=@OC_USER@
 Environment=HOME=@OC_HOME@
 # Create this file after registration: SIGNAL_ACCOUNT=+1… and SIGNAL_HTTP_LISTEN=127.0.0.1:8080
 EnvironmentFile=@OC_HOME@/.hermes/signal.env
-ExecStart=/usr/local/bin/signal-cli -a ${SIGNAL_ACCOUNT} daemon --http ${SIGNAL_HTTP_LISTEN:-127.0.0.1:8080}
+ExecStart=/usr/local/bin/signal-hermes-daemon
 Restart=on-failure
 RestartSec=30
 StartLimitIntervalSec=300

@@ -1,0 +1,18 @@
+#!/usr/bin/env bash
+# signal-hermes-daemon — tiny wrapper for the Signal daemon on Hermes LXC.
+#
+# When run manually, pass the Signal account number or set SIGNAL_ACCOUNT.
+# It defaults to the loopback HTTP endpoint used by hermes-agent.
+
+set -euo pipefail
+
+account="${1:-${SIGNAL_ACCOUNT:-}}"
+http="${SIGNAL_HTTP_LISTEN:-${SIGNAL_HTTP:-127.0.0.1:8080}}"
+
+if [[ -z "$account" ]]; then
+  echo "Usage: signal-hermes-daemon +155****4567" >&2
+  echo "or set SIGNAL_ACCOUNT=+155****4567" >&2
+  exit 2
+fi
+
+exec "$HOME/.local/bin/signal-cli" --account "$account" daemon --http "$http"

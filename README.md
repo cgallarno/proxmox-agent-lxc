@@ -83,7 +83,8 @@ Tailscale, git-backed config history, recovery tools.
 - **Headless browser** *(optional, `ENABLE_BROWSER=true`)* — Chromium for
   OpenClaw's built-in browser automation, or Playwright system libs for
   hermes-agent's bundled Chromium. No VNC, no `--no-sandbox`.
-- **Signal** *(optional, `ENABLE_SIGNAL=true`)* — native `signal-cli` binary.
+- **Signal** *(optional, `ENABLE_SIGNAL=true`)* — native `signal-cli` binary
+  plus a systemd service (`agent-signal.service`) that keeps the daemon up.
 
 ## Day-to-day operations
 
@@ -96,6 +97,9 @@ The container ships **no broad `sudo`**. These root/operator helpers are install
 - **`hermes-gateway-control`** *(Hermes only, optional)* — when
   `ENABLE_HERMES_GATEWAY_CONTROL=true`, lets the Hermes user status/restart only
   the provisioner's gateway systemd units through a root sidecar Unix socket.
+- **`signal-hermes-daemon`** *(Signal, optional)* — small wrapper for manual
+  daemon starts; it supplies the required `--http` listener and accepts either
+  `SIGNAL_ACCOUNT` or a phone-number argument.
 
 ### Gateway (start / stop / restart)
 
@@ -182,7 +186,8 @@ ropenclaw config set <key> <val>
 ### Running arbitrary commands as the agent user
 
 ```bash
-as_hermes signal-cli -a +1234567890 listAccounts
+as_hermes signal-cli -a +123****7890 listAccounts
+as_hermes signal-hermes-daemon +123****7890
 as_hermes git -C ~/.hermes status
 as_openclaw env | grep PATH
 ```
@@ -230,7 +235,8 @@ provision-lxc.sh            host-side: create the unprivileged LXC, run setup
 container/setup.sh          in-container: install + harden the agent
 config.example.env          tunables (copy to config.env)
 bin/                        agent-config-{push,restore,log} (both agents)
-systemd/                    agent-gateway + agent-config-watch unit templates
+systemd/                    agent-gateway + agent-config-watch + agent-signal
+                           unit templates
 ```
 
 ## License
