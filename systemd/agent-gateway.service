@@ -29,7 +29,9 @@ RestartSec=5
 NoNewPrivileges=true
 PrivateTmp=true
 ProtectSystem=full
-ProtectHome=true
+# Keep home trees read-only while allowing access to /run/user/<uid>/bus for
+# Hermes' restart-safe user-scoped cron workers.
+ProtectHome=read-only
 ReadWritePaths=@OC_HOME@
 ProtectControlGroups=true
 ProtectKernelTunables=true
