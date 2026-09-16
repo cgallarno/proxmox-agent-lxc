@@ -1,7 +1,7 @@
 [Unit]
 Description=AI agent gateway (hardened, non-root)
-After=network-online.target
-Wants=network-online.target
+After=network-online.target user@@OC_UID@.service
+Wants=network-online.target user@@OC_UID@.service
 
 [Service]
 Type=simple
@@ -11,6 +11,8 @@ Group=@OC_USER@
 Environment=HOME=@OC_HOME@
 Environment=NODE_ENV=production
 Environment=PATH=@AGENT_PATH@
+Environment=XDG_RUNTIME_DIR=/run/user/@OC_UID@
+Environment=DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/@OC_UID@/bus
 WorkingDirectory=@OC_HOME@
 ExecStart=@AGENT_CMD@ gateway
 Restart=on-failure
@@ -19,7 +21,9 @@ RestartSec=5
 # Note: this unit controls the default Hermes profile only. Additional Hermes
 # profiles should be run as systemd *system* instances via
 # agent-gateway@<profile>.service, not via `hermes --profile <p> gateway start`,
-# because the non-login system user has no user D-Bus / linger session.
+# because the durable control plane is system-level. The provisioner enables a
+# narrow lingering user manager so Hermes can place cron workers in transient
+# user scopes without giving the agent system-level systemd control.
 
 # Hardening — least privilege for an exec-capable agent on untrusted input.
 NoNewPrivileges=true
