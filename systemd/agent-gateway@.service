@@ -1,7 +1,7 @@
 [Unit]
 Description=Hermes gateway profile %i (hardened, non-root)
-After=network-online.target
-Wants=network-online.target
+After=network-online.target user@@OC_UID@.service
+Wants=network-online.target user@@OC_UID@.service
 
 [Service]
 Type=simple
@@ -10,6 +10,8 @@ Group=@OC_USER@
 Environment=HOME=@OC_HOME@
 Environment=NODE_ENV=production
 Environment=PATH=@AGENT_PATH@
+Environment=XDG_RUNTIME_DIR=/run/user/@OC_UID@
+Environment=DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/@OC_UID@/bus
 WorkingDirectory=@OC_HOME@
 ExecStart=@AGENT_CMD@ --profile %i gateway
 Restart=on-failure
@@ -19,7 +21,9 @@ RestartSec=5
 NoNewPrivileges=true
 PrivateTmp=true
 ProtectSystem=full
-ProtectHome=true
+# Keep home trees read-only while allowing access to /run/user/<uid>/bus for
+# Hermes' restart-safe user-scoped cron workers.
+ProtectHome=read-only
 ReadWritePaths=@OC_HOME@
 ProtectControlGroups=true
 ProtectKernelTunables=true

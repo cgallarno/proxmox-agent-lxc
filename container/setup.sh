@@ -61,6 +61,13 @@ log "Dedicated non-root agent user: $OC_USER"
 if ! id "$OC_USER" >/dev/null 2>&1; then
   useradd --system --create-home --home-dir "$OC_HOME" --shell /usr/sbin/nologin "$OC_USER"
 fi
+OC_UID=$(id -u "$OC_USER")
+if [[ "$AGENT" == "hermes" ]]; then
+  # Hermes launches cron workers in transient user scopes so they survive a
+  # gateway restart and receive independent cgroup memory accounting.
+  loginctl enable-linger "$OC_USER"
+  systemctl start "user@${OC_UID}.service"
+fi
 install -d -o "$OC_USER" -g "$OC_USER" -m 700 "$AGENT_REPO"
 ok "user + repo dir ready ($OC_HOME)"
 
@@ -197,7 +204,7 @@ echo "$PATH_LINE" > /etc/profile.d/usr-local-bin.sh
 chmod 644 /etc/profile.d/usr-local-bin.sh
 ok "ensured /usr/local/bin on root PATH (pct enter + login shells)"
 
-subst() { sed -e "s|@OC_USER@|$OC_USER|g" -e "s|@OC_HOME@|$OC_HOME|g" \
+subst() { sed -e "s|@OC_USER@|$OC_USER|g" -e "s|@OC_UID@|$OC_UID|g" -e "s|@OC_HOME@|$OC_HOME|g" \
               -e "s|@AGENT_CMD@|$AGENT_CMD|g" -e "s|@AGENT_PATH@|$AGENT_PATH|g" "$1"; }
 subst "$REPO_ROOT/systemd/agent-gateway.service"      > /etc/systemd/system/agent-gateway.service
 if [[ "$AGENT" == "hermes" && -f "$REPO_ROOT/systemd/agent-gateway@.service" ]]; then
